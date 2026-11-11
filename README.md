@@ -311,69 +311,87 @@ Full, fresh, unsampled statistics directly implement the equations. Diagonal, sa
 These are **fresh measurements of this package**, not a reproduction of the paper tables.
 **Selection:** only completed cells faster than both AdamW and Muon are shown. This is a selected positive subset, not an overall win-rate claim. All trials, including unsuccessful and non-positive results, remain in the private experiment archive.
 
-Current audited coverage: **3 selected positive cells out of 87 fully scored cells**. Other scheduled cells are omitted until complete.
+Current audited coverage: **4 selected positive cells out of 104 fully scored cells**. Other scheduled cells are omitted until complete.
 
 ### Protocol
 
 - Each optimizer has three learning rates and three seeds (0–2), with matched architecture, split, epoch budget, and batch size. AdamW rates: `{0.001, 0.003, 0.01}`; Muon and GraphMuon rates: `{0.003, 0.01, 0.03}`. Each family is selected by its lowest three-epoch-sustained mean validation loss, never by crossing time or test metrics.
-- The fixed target is `1.02 × max_seed(best three-epoch-sustained AdamW validation loss)` for the selected AdamW configuration. A run reaches it after three consecutive validation evaluations at or below it. All three seeds of all three selected configurations must reach it for a numeric positive row.
-- Times are mean cumulative **training plus validation seconds** at the third qualifying epoch, measured with CUDA synchronization. Speedup is the ratio of those mean times: `baseline seconds / GraphMuon seconds`. Loading and a state-restored kernel warmup are excluded. Values above `1×` favor GraphMuon.
+- The fixed target is `1.02 × max_seed(best three-epoch-sustained AdamW validation loss)` for the selected AdamW configuration. A run reaches it after three consecutive validation evaluations at or below it. AdamW and GraphMuon must reach it in all three selected seeds. If Muon misses in a completed run, its measured final-budget time is a lower bound on that seed’s crossing time: `>` marks the resulting lower bounds on its mean time and speedup. “Muon reached” shows its successful seeds; a censored row is included only when the speedup lower bound also exceeds 1.
+- Times are mean cumulative **training plus validation seconds** at the third qualifying epoch, measured with CUDA synchronization. Speedup is the ratio of those mean times: `baseline seconds / GraphMuon seconds`. Loading and one state-restored forward/backward warmup are excluded; the first optimizer update is timed. Values above `1×` favor GraphMuon.
 - Node models: two graph layers, width 64, dropout 0.3, 200 epochs; GPS uses two local SAGE blocks with four-head Performer attention. Graph models: three layers, width 64, mean pooling, dropout 0.1, 40 epochs, batch size 512. GraphGPS uses four-head attention and local GINE blocks. These are fixed-budget transfer experiments, not claims of fully tuned final accuracy.
 - GraphMuon: `tau=0.5`, five NS iterations, diagonal metric, 2,048 sampled rows with replacement, covariance refresh every ten active updates. Muon uses native `torch.optim.Muon` with per-matrix rates adjusted to the same mathematical shape correction; both use AdamW at 0.001 for auxiliary parameters. Weight decay is zero for all methods. GAT uses the documented frozen mean-head approximation.
 - PyTorch 2.11.0+cu130, PyG 2.7.0, FP32 weights, BF16 NS, TF32 disabled, one RTX 6000 Ada GPU and four CPU threads per task. Timings from different optimizer runs can be affected by shared-node contention.
 - Citation datasets use their standard public split and normalized features. Heterophilous datasets use published split 0 and standardized features; non-directed variants are symmetrized. OGB uses official train/validation splits; MAG uses its paper-node citation subgraph. Molecular test sets are not used for selection.
+- Products and proteins use the same two-layer GCN equations with sparse CSR propagation and observers on the post-propagation linear modules to bound memory use. Protein node features are mean incident edge features; its target loss is multilabel BCE. Dataset preparation is excluded from timing.
 - Three seeds are a small sample. Ratios near 1 and sub-second measurements should be treated as noisy observations, not established statistical gains. A dagger marks any row whose mean crossing time is below one second for any method. No aggregate across this selected subset is reported.
 
 ### GCN — node classification
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
+0 positive rows / 21 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
 No completed positive comparison is currently listed for this architecture.
 
 ### GAT — node classification
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| cora † | Citation node classification | 0.9855 | 0.156 | 0.307 | 0.107 | 1.46× | 2.87× | 3 |
+1 positive rows / 21 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| cora † | Citation node classification | 0.9855 | 0.156 | 0.307 | 0.107 | 1.46× | 2.87× | 3/3 | 3 |
 
 ### GraphSAGE — node classification
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| citeseer † | Citation node classification | 1.083 | 0.097 | 0.158 | 0.050 | 1.95× | 3.17× | 3 |
+2 positive rows / 21 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| citeseer † | Citation node classification | 1.083 | 0.097 | 0.158 | 0.050 | 1.95× | 3.17× | 3/3 | 3 |
+| pubmed † | Citation node classification | 0.5888 | 0.226 | >0.719 | 0.110 | 2.05× | >6.52× | 2/3 | 3 |
 
 ### GIN — node classification
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
-| citeseer † | Citation node classification | 1.688 | 0.165 | 0.144 | 0.091 | 1.81× | 1.58× | 3 |
+1 positive rows / 21 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| citeseer † | Citation node classification | 1.688 | 0.165 | 0.144 | 0.091 | 1.81× | 1.58× | 3/3 | 3 |
 
 ### GPS with Performer attention — node classification
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
+0 positive rows / 11 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
 No completed positive comparison is currently listed for this architecture.
 
 ### GCN — graph classification and regression
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
+0 positive rows / 3 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
 No completed positive comparison is currently listed for this architecture.
 
 ### GINE — graph classification and regression
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
+0 positive rows / 3 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
 No completed positive comparison is currently listed for this architecture.
 
 ### GraphGPS — graph classification and regression
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|
+0 positive rows / 3 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
 No completed positive comparison is currently listed for this architecture.
 <!-- BENCHMARKS:END -->

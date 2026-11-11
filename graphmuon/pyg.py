@@ -29,7 +29,8 @@ def attach(optimizer, model):
                 "GCN auto-observer requires COO edge_index [2,E]; use observe() for sparse adjacency"
             )
         with torch.no_grad(), torch.autocast(device_type=x.device.type, enabled=False):
-            x = x.detach().float()
+            dtype = torch.float64 if layer.lin.weight.dtype == torch.float64 else torch.float32
+            x = x.detach().to(dtype)
             if layer.normalize:
                 if layer._cached_edge_index is not None:
                     edges, weights = layer._cached_edge_index
@@ -84,14 +85,15 @@ def attach(optimizer, model):
             # Approximation: average frozen per-head attention, including dropout.
             # The actual attention Jacobian is intentionally outside this metric.
             with torch.no_grad(), torch.autocast(device_type=x.device.type, enabled=False):
-                weights = inputs["alpha"].detach().float().mean(-1)
+                dtype = torch.float64 if parameter.dtype == torch.float64 else torch.float32
+                weights = inputs["alpha"].detach().to(dtype).mean(-1)
                 adjacency = torch.sparse_coo_tensor(
                     edges.flip(0),
                     weights,
                     (x.shape[0], x.shape[0]),
                     device=x.device,
                 )
-                optimizer.observe(parameter, torch.sparse.mm(adjacency, x.float()))
+                optimizer.observe(parameter, torch.sparse.mm(adjacency, x.to(dtype)))
 
         def release(module, args, output):
             cache.clear()
