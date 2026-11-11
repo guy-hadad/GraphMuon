@@ -12,6 +12,7 @@ def attach(optimizer, model):
     try:
         from torch_geometric.nn import GATConv, GCNConv, GINConv, GINEConv, SAGEConv
         from torch_geometric.nn.conv.gcn_conv import gcn_norm
+        from torch_geometric.nn.dense.linear import Linear as PyGLinear
     except ImportError as error:
         raise ImportError("from_model() requires pip install 'graphmuon[pyg]'") from error
 
@@ -119,9 +120,13 @@ def attach(optimizer, model):
                 optimizer.watch(layer.lin_l)
         elif isinstance(layer, (GINConv, GINEConv)):
             # Hook the actual matrix input, after aggregation and edge processing.
-            first = next((m for m in layer.nn.modules() if isinstance(m, nn.Linear)), None)
+            first = next(
+                (m for m in layer.nn.modules() if isinstance(m, (nn.Linear, PyGLinear))), None
+            )
             if first is None:
-                warnings.warn("GIN/GINE has no nn.Linear: use manual observe()", stacklevel=2)
+                warnings.warn(
+                    "GIN/GINE has no supported linear layer: use manual observe()", stacklevel=2
+                )
             elif first.weight in optimizer._groups:
                 optimizer.watch(first)
         elif isinstance(layer, GATConv):

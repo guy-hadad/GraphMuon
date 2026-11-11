@@ -90,7 +90,7 @@ optimizer.remove_hooks()
 |---|---|---|
 | `GCNConv` | Normalized propagated features `S @ X` | Homogeneous COO indices; honors normalization, edge weights, self-loops, and flow |
 | `SAGEConv` | Actual input to `lin_l`, after aggregation | Root and projection matrices remain Muon |
-| `GINConv` / `GINEConv` | Input to the first `nn.Linear` in the local MLP | Includes aggregation, root term, and GINE edge processing |
+| `GINConv` / `GINEConv` | Input to the first Torch or PyG linear layer in the local MLP | Includes PyG `MLP`, aggregation, root term, and GINE edge processing |
 | `GPSConv` | Supported local modules, discovered recursively | Unobserved attention and feed-forward matrices remain Muon |
 | `GATConv` | Raw features propagated by frozen, mean-head attention | Homogeneous COO, shared projection, source-to-target flow; approximation below |
 

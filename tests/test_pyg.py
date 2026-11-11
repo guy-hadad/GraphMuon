@@ -53,6 +53,24 @@ def test_embedding_and_bias_groups_use_scheduled_adamw():
     assert group["lr"] == 0.003
 
 
+@pytest.mark.parametrize("edge_features", [False, True])
+def test_pyg_mlp_inside_gin_and_gine(edge_features):
+    from torch_geometric.nn import MLP
+
+    mlp = MLP([4, 6, 3], norm=None)
+    layer = GINEConv(mlp, edge_dim=2) if edge_features else GINConv(mlp)
+    optimizer = GraphMuon.from_model(layer)
+    assert len(optimizer.graph_parameters) == 1
+    assert optimizer.graph_parameters[0] is mlp.lins[0].weight
+    x = torch.randn(8, 4)
+    edges = torch.tensor([[0, 1, 2, 3, 4, 5, 6, 7], [1, 2, 3, 4, 5, 6, 7, 0]])
+    args = (x, edges, torch.randn(8, 2)) if edge_features else (x, edges)
+    layer(*args).square().mean().backward()
+    optimizer.step()
+    assert optimizer.state[mlp.lins[0].weight]["covariance"].shape == (4, 4)
+    optimizer.remove_hooks()
+
+
 @pytest.mark.parametrize("kind", ["gcn", "sage", "gin", "gine", "gat"])
 def test_frozen_graph_layers_are_excluded(kind):
     mlp = nn.Sequential(nn.Linear(4, 6), nn.ReLU(), nn.Linear(6, 3))
