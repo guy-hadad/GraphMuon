@@ -181,6 +181,8 @@ optimizer.watch(model.graph_projection)
 
 Place embeddings or selected output heads in the AdamW group regardless of rank. A parameter must belong to only one group. `from_model()` excludes frozen parameters and sends embeddings to AdamW automatically.
 
+Only dense, real gradients are supported. Exclude parameters with sparse gradients and update them with a separate optimizer.
+
 In a direct mixed-rank `auto` group, `adamw_lr` controls non-matrix parameters independently of `lr`. An ordinary scheduler changes the group's `lr`, not its `adamw_lr`. Use explicit AdamW groups or `from_model()` when scheduling both rates.
 
 ## Options
@@ -311,7 +313,7 @@ Full, fresh, unsampled statistics directly implement the equations. Diagonal, sa
 These are **fresh measurements of this package**, not a reproduction of the paper tables.
 **Selection:** only completed cells faster than both AdamW and Muon are shown. This is a selected positive subset, not an overall win-rate claim. All trials, including unsuccessful and non-positive results, remain in the private experiment archive.
 
-Current audited coverage: **11 selected positive cells out of 126 / 132 planned dataset–architecture cells**. Remaining scheduled cells are omitted until complete.
+Current audited coverage: **14 selected positive cells out of 129 / 132 planned dataset–architecture cells**. Remaining scheduled cells are omitted until complete.
 
 ### Protocol
 
@@ -325,76 +327,79 @@ Current audited coverage: **11 selected positive cells out of 126 / 132 planned 
 - Products and proteins use the same two-layer GCN equations with sparse CSR propagation and observers on the post-propagation linear modules to bound memory use. Protein node features are mean incident edge features; its target loss is multilabel BCE. Dataset preparation is excluded from timing.
 - Three seeds are a small sample. Ratios near 1 and sub-second measurements should be treated as noisy observations, not established statistical gains. A dagger marks any row whose mean crossing time is below one second for any method. No aggregate across this selected subset is reported.
 
+The LR A/M/G column gives the validation-selected base learning rates for AdamW, Muon, and GraphMuon. Every row uses three seeds per method.
+
 ### GCN — node classification
 
-1 positive rows / 23 fully scored dataset cells.
+2 positive rows / 24 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| ogbn-arxiv | OGB node classification | 1.136 | 3.444 | 3.363 | 1.031 | 3.34× | 3.26× | 3/3 | 3 |
+| ogbn-arxiv | OGB node classification | 1.136 | 3.444 | 3.363 | 1.031 | 3.34× | 3.26× | 3/3 | 0.01/0.03/0.03 |
+| ogbn-mag | OGB node classification | 2.906 | 67.176 | >89.726 | 53.185 | 1.26× | >1.68× | 0/3 | 0.01/0.03/0.03 |
 
 ### GAT — node classification
 
 2 positive rows / 22 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| cora † | Citation node classification | 0.9855 | 0.156 | 0.307 | 0.107 | 1.46× | 2.87× | 3/3 | 3 |
-| ogbn-arxiv | OGB node classification | 1.04 | 5.214 | 4.833 | 1.757 | 2.97× | 2.75× | 3/3 | 3 |
+| cora † | Citation node classification | 0.9855 | 0.156 | 0.307 | 0.107 | 1.46× | 2.87× | 3/3 | 0.01/0.03/0.003 |
+| ogbn-arxiv | OGB node classification | 1.04 | 5.214 | 4.833 | 1.757 | 2.97× | 2.75× | 3/3 | 0.01/0.03/0.03 |
 
 ### GraphSAGE — node classification
 
 3 positive rows / 23 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| citeseer † | Citation node classification | 1.083 | 0.097 | 0.158 | 0.050 | 1.95× | 3.17× | 3/3 | 3 |
-| ogbn-mag | OGB node classification | 2.829 | 26.119 | 26.732 | 13.825 | 1.89× | 1.93× | 3/3 | 3 |
-| pubmed † | Citation node classification | 0.5888 | 0.226 | >0.719 | 0.110 | 2.05× | >6.52× | 2/3 | 3 |
+| citeseer † | Citation node classification | 1.083 | 0.097 | 0.158 | 0.050 | 1.95× | 3.17× | 3/3 | 0.01/0.03/0.003 |
+| ogbn-mag | OGB node classification | 2.829 | 26.119 | 26.732 | 13.825 | 1.89× | 1.93× | 3/3 | 0.01/0.03/0.03 |
+| pubmed † | Citation node classification | 0.5888 | 0.226 | >0.719 | 0.110 | 2.05× | >6.52× | 2/3 | 0.003/0.01/0.003 |
 
 ### GIN — node classification
 
 3 positive rows / 23 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| citeseer † | Citation node classification | 1.688 | 0.165 | 0.144 | 0.091 | 1.81× | 1.58× | 3/3 | 3 |
-| ogbn-arxiv | OGB node classification | 1.929 | 4.432 | 3.155 | 2.543 | 1.74× | 1.24× | 3/3 | 3 |
-| ogbn-mag | OGB node classification | 2.963 | 36.408 | >41.587 | 34.257 | 1.06× | >1.21× | 2/3 | 3 |
+| citeseer † | Citation node classification | 1.688 | 0.165 | 0.144 | 0.091 | 1.81× | 1.58× | 3/3 | 0.001/0.01/0.003 |
+| ogbn-arxiv | OGB node classification | 1.929 | 4.432 | 3.155 | 2.543 | 1.74× | 1.24× | 3/3 | 0.003/0.01/0.03 |
+| ogbn-mag | OGB node classification | 2.963 | 36.408 | >41.587 | 34.257 | 1.06× | >1.21× | 2/3 | 0.003/0.03/0.03 |
 
 ### GPS with Performer attention — node classification
 
-0 positive rows / 21 fully scored dataset cells.
+1 positive rows / 22 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-
-No completed positive comparison is currently listed for this architecture.
+| ogbn-arxiv | OGB node classification | 1.027 | 36.115 | 26.796 | 23.167 | 1.56× | 1.16× | 3/3 | 0.003/0.01/0.01 |
 
 ### GCN — graph classification and regression
 
 1 positive rows / 5 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| zinc | Molecular regression (MAE) | 0.5949 | 9.436 | 9.178 | 7.849 | 1.20× | 1.17× | 3/3 | 3 |
+| zinc | Molecular regression (MAE) | 0.5949 | 9.436 | 9.178 | 7.849 | 1.20× | 1.17× | 3/3 | 0.003/0.01/0.003 |
 
 ### GINE — graph classification and regression
 
 0 positive rows / 5 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 
 No completed positive comparison is currently listed for this architecture.
 
 ### GraphGPS — graph classification and regression
 
-1 positive rows / 4 fully scored dataset cells.
+2 positive rows / 5 fully scored dataset cells.
 
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| ogbg-molhiv | Molecular classification (BCE) | 0.08173 | 54.672 | 34.685 | 29.039 | 1.88× | 1.19× | 3/3 | 3 |
+| ogbg-molhiv | Molecular classification (BCE) | 0.08173 | 54.672 | 34.685 | 29.039 | 1.88× | 1.19× | 3/3 | 0.001/0.003/0.01 |
+| zinc | Molecular regression (MAE) | 0.4251 | 22.459 | 22.612 | 21.532 | 1.04× | 1.05× | 3/3 | 0.003/0.01/0.01 |
 <!-- BENCHMARKS:END -->
 
 ## Repository contents
