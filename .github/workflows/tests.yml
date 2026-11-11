@@ -1,0 +1,22 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - python: '3.10'
+            torch: '2.2.2'
+          - python: '3.12'
+            torch: '2.11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install 'numpy<2' 'torch==${{ matrix.torch }}' --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+      - run: pip install -e '.[pyg,dev]'
+      - run: pytest -q
+      - run: ruff check .
+      - run: python -m build

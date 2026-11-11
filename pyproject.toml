@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "graphmuon"
+version = "0.1.0"
+description = "Graph-aware Muon with the PyTorch optimizer interface"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Guy Hadad"}]
+dependencies = ["torch>=2.2"]
+classifiers = ["Programming Language :: Python :: 3", "Topic :: Scientific/Engineering :: Artificial Intelligence"]
+
+[project.optional-dependencies]
+pyg = ["torch-geometric>=2.7,<3"]
+dev = ["pytest>=8", "build", "ruff"]
+
+[project.urls]
+Repository = "https://github.com/guy-hadad/GraphMuon"
+Paper = "https://arxiv.org/abs/2611.08379"
+
+[tool.setuptools.packages.find]
+include = ["graphmuon*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
