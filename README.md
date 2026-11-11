@@ -270,7 +270,7 @@ scheduler.load_state_dict(checkpoint["scheduler"])
 optimizer.load_state_dict(checkpoint["optimizer"])
 ```
 
-Optimizer state includes momentum, AdamW moments, covariance, eigendecompositions, refresh counters, and layout declarations. Hook handles and pending observations are excluded. A checkpoint during accumulation is therefore incomplete. Also save RNG and AMP scaler state for exact training continuation.
+Optimizer state includes momentum, AdamW moments, covariance, eigendecompositions, refresh counters, and layout declarations. Hook handles and pending observations are excluded. A checkpoint during accumulation is therefore incomplete. For reproducible continuation, also save RNG, data-loader generator, and AMP scaler states; nondeterministic kernels can still prevent bitwise equality.
 
 Closures use the ordinary PyTorch pattern:
 
@@ -301,7 +301,7 @@ This is an eager optimizer. Hooks, Python counters, and collectives are not desi
 
 For a mathematical `[in, out]` matrix, the package forms an uncentered second moment `C = X_g.T @ X_g / n`, trace-normalizes and regularizes the directional metric, computes a metric-transformed Muon direction, and normalizes its scale using raw `C`. See equations (5)–(8) and Algorithm 1 in the [paper](https://arxiv.org/pdf/2611.08379).
 
-The shape correction is `r = sqrt(max(1, in / out))` on the mathematical matrix, independent of storage layout. Matrix decay uses effective rate `lr * r`. This differs from applying native PyTorch Muon's shape correction directly to a stored `[out, in]` tensor; adjust per-matrix baseline rates when comparing. `tau=0` disables metric-aware orthogonalization; `graph_scale=False` separately disables graph normalization. Set both for a Muon control. Numerical results need not be bitwise identical to native `torch.optim.Muon`.
+The shape correction is `r = sqrt(max(1, in / out))` on the mathematical matrix, independent of storage layout. Matrix decay uses effective rate `lr * r`. This differs from applying native PyTorch Muon's shape correction directly to a stored `[out, in]` tensor; adjust per-matrix baseline rates when comparing. Nonzero native Muon decay also needs adjustment to match this convention; these benchmarks use zero decay. `tau=0` disables metric-aware orthogonalization; `graph_scale=False` separately disables graph normalization. Set both for a Muon control. Numerical results need not be bitwise identical to native `torch.optim.Muon`.
 
 Full, fresh, unsampled statistics directly implement the equations. Diagonal, sampled, or stale statistics estimate a different metric from the current full batch; the exact-covariance representation bound should not be claimed unchanged for them. Zero feature energy uses an isotropic directional fallback while keeping zero raw energy. NS is a fixed polynomial approximation, not an exact SVD polar factor.
 
@@ -311,7 +311,7 @@ Full, fresh, unsampled statistics directly implement the equations. Diagonal, sa
 These are **fresh measurements of this package**, not a reproduction of the paper tables.
 **Selection:** only completed cells faster than both AdamW and Muon are shown. This is a selected positive subset, not an overall win-rate claim. All trials, including unsuccessful and non-positive results, remain in the private experiment archive.
 
-Current audited coverage: **4 selected positive cells out of 104 fully scored cells**. Other scheduled cells are omitted until complete.
+Current audited coverage: **11 selected positive cells out of 126 / 132 planned dataset–architecture cells**. Remaining scheduled cells are omitted until complete.
 
 ### Protocol
 
@@ -320,12 +320,49 @@ Current audited coverage: **4 selected positive cells out of 104 fully scored ce
 - Times are mean cumulative **training plus validation seconds** at the third qualifying epoch, measured with CUDA synchronization. Speedup is the ratio of those mean times: `baseline seconds / GraphMuon seconds`. Loading and one state-restored forward/backward warmup are excluded; the first optimizer update is timed. Values above `1×` favor GraphMuon.
 - Node models: two graph layers, width 64, dropout 0.3, 200 epochs; GPS uses two local SAGE blocks with four-head Performer attention. Graph models: three layers, width 64, mean pooling, dropout 0.1, 40 epochs, batch size 512. GraphGPS uses four-head attention and local GINE blocks. These are fixed-budget transfer experiments, not claims of fully tuned final accuracy.
 - GraphMuon: `tau=0.5`, five NS iterations, diagonal metric, 2,048 sampled rows with replacement, covariance refresh every ten active updates. Muon uses native `torch.optim.Muon` with per-matrix rates adjusted to the same mathematical shape correction; both use AdamW at 0.001 for auxiliary parameters. Weight decay is zero for all methods. GAT uses the documented frozen mean-head approximation.
-- PyTorch 2.11.0+cu130, PyG 2.7.0, FP32 weights, BF16 NS, TF32 disabled, one RTX 6000 Ada GPU and four CPU threads per task. Timings from different optimizer runs can be affected by shared-node contention.
+- PyTorch 2.11.0+cu130, PyG 2.7.0, FP32 weights, BF16 NS, TF32 disabled, one RTX 6000 Ada GPU and four CPU threads per task. GAT/MAG uses BF16 autocast for all three optimizers because FP32 activations exceed GPU memory; other cells use FP32 forward/backward. Timings from different optimizer runs can be affected by shared-node contention.
 - Citation datasets use their standard public split and normalized features. Heterophilous datasets use published split 0 and standardized features; non-directed variants are symmetrized. OGB uses official train/validation splits; MAG uses its paper-node citation subgraph. Molecular test sets are not used for selection.
 - Products and proteins use the same two-layer GCN equations with sparse CSR propagation and observers on the post-propagation linear modules to bound memory use. Protein node features are mean incident edge features; its target loss is multilabel BCE. Dataset preparation is excluded from timing.
 - Three seeds are a small sample. Ratios near 1 and sub-second measurements should be treated as noisy observations, not established statistical gains. A dagger marks any row whose mean crossing time is below one second for any method. No aggregate across this selected subset is reported.
 
 ### GCN — node classification
+
+1 positive rows / 23 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ogbn-arxiv | OGB node classification | 1.136 | 3.444 | 3.363 | 1.031 | 3.34× | 3.26× | 3/3 | 3 |
+
+### GAT — node classification
+
+2 positive rows / 22 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| cora † | Citation node classification | 0.9855 | 0.156 | 0.307 | 0.107 | 1.46× | 2.87× | 3/3 | 3 |
+| ogbn-arxiv | OGB node classification | 1.04 | 5.214 | 4.833 | 1.757 | 2.97× | 2.75× | 3/3 | 3 |
+
+### GraphSAGE — node classification
+
+3 positive rows / 23 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| citeseer † | Citation node classification | 1.083 | 0.097 | 0.158 | 0.050 | 1.95× | 3.17× | 3/3 | 3 |
+| ogbn-mag | OGB node classification | 2.829 | 26.119 | 26.732 | 13.825 | 1.89× | 1.93× | 3/3 | 3 |
+| pubmed † | Citation node classification | 0.5888 | 0.226 | >0.719 | 0.110 | 2.05× | >6.52× | 2/3 | 3 |
+
+### GIN — node classification
+
+3 positive rows / 23 fully scored dataset cells.
+
+| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| citeseer † | Citation node classification | 1.688 | 0.165 | 0.144 | 0.091 | 1.81× | 1.58× | 3/3 | 3 |
+| ogbn-arxiv | OGB node classification | 1.929 | 4.432 | 3.155 | 2.543 | 1.74× | 1.24× | 3/3 | 3 |
+| ogbn-mag | OGB node classification | 2.963 | 36.408 | >41.587 | 34.257 | 1.06× | >1.21× | 2/3 | 3 |
+
+### GPS with Performer attention — node classification
 
 0 positive rows / 21 fully scored dataset cells.
 
@@ -334,52 +371,17 @@ Current audited coverage: **4 selected positive cells out of 104 fully scored ce
 
 No completed positive comparison is currently listed for this architecture.
 
-### GAT — node classification
-
-1 positive rows / 21 fully scored dataset cells.
-
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| cora † | Citation node classification | 0.9855 | 0.156 | 0.307 | 0.107 | 1.46× | 2.87× | 3/3 | 3 |
-
-### GraphSAGE — node classification
-
-2 positive rows / 21 fully scored dataset cells.
-
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| citeseer † | Citation node classification | 1.083 | 0.097 | 0.158 | 0.050 | 1.95× | 3.17× | 3/3 | 3 |
-| pubmed † | Citation node classification | 0.5888 | 0.226 | >0.719 | 0.110 | 2.05× | >6.52× | 2/3 | 3 |
-
-### GIN — node classification
-
-1 positive rows / 21 fully scored dataset cells.
-
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| citeseer † | Citation node classification | 1.688 | 0.165 | 0.144 | 0.091 | 1.81× | 1.58× | 3/3 | 3 |
-
-### GPS with Performer attention — node classification
-
-0 positive rows / 11 fully scored dataset cells.
-
-| Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-
-No completed positive comparison is currently listed for this architecture.
-
 ### GCN — graph classification and regression
 
-0 positive rows / 3 fully scored dataset cells.
+1 positive rows / 5 fully scored dataset cells.
 
 | Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-
-No completed positive comparison is currently listed for this architecture.
+| zinc | Molecular regression (MAE) | 0.5949 | 9.436 | 9.178 | 7.849 | 1.20× | 1.17× | 3/3 | 3 |
 
 ### GINE — graph classification and regression
 
-0 positive rows / 3 fully scored dataset cells.
+0 positive rows / 5 fully scored dataset cells.
 
 | Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -388,12 +390,11 @@ No completed positive comparison is currently listed for this architecture.
 
 ### GraphGPS — graph classification and regression
 
-0 positive rows / 3 fully scored dataset cells.
+1 positive rows / 4 fully scored dataset cells.
 
 | Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | Seeds |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
-
-No completed positive comparison is currently listed for this architecture.
+| ogbg-molhiv | Molecular classification (BCE) | 0.08173 | 54.672 | 34.685 | 29.039 | 1.88× | 1.19× | 3/3 | 3 |
 <!-- BENCHMARKS:END -->
 
 ## Repository contents
