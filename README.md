@@ -102,6 +102,37 @@ GCN and GAT auto-observers require dense COO `edge_index` of shape `[2, E]`. For
 python examples/pyg_node_classification.py --dataset Cora --epochs 200
 ```
 
+### Graph minibatches and sampled neighborhoods
+
+For graph classification or regression, keep your existing model and PyG data loader. If your model accepts a `Batch` object, the training loop is:
+
+```python
+optimizer = GraphMuon.from_model(model, lr=0.02)
+for batch in train_loader:
+    batch = batch.to(device)
+    optimizer.zero_grad()
+    prediction = model(batch)
+    loss = criterion(prediction, batch.y)
+    loss.backward()
+    optimizer.step()
+```
+
+The observers run inside supported layers, including local GINE modules nested in GraphGPS. They combine feature rows across the graphs in each minibatch. Use your task's normal target shapes, missing-label masks, and loss reduction.
+
+For a node model trained with PyG `NeighborLoader`, supervise its seed nodes as usual:
+
+```python
+for sampled in train_loader:
+    sampled = sampled.to(device)
+    optimizer.zero_grad()
+    prediction = model(sampled.x, sampled.edge_index)
+    n = sampled.batch_size
+    criterion(prediction[:n], sampled.y[:n]).backward()
+    optimizer.step()
+```
+
+Here the metric describes the sampled neighborhoods consumed by each layer, including context nodes; it is not the full-graph metric or a metric restricted to supervised seeds. Use `GCNConv(cached=False)` when the sampled graph changes between forwards. These examples illustrate integration; neighbor sampling is not part of the benchmark sweep below.
+
 ## Custom layers: observe a linear module
 
 A linear module that consumes already propagated features needs one hook:
@@ -313,18 +344,18 @@ Full, fresh, unsampled statistics directly implement the equations. Diagonal, sa
 These are **fresh measurements of this package**, not a reproduction of the paper tables.
 **Selection:** only completed cells faster than both AdamW and Muon are shown. This is a selected positive subset, not an overall win-rate claim. All trials, including unsuccessful and non-positive results, remain in the private experiment archive.
 
-Current audited coverage: **14 selected positive cells out of 129 / 132 planned dataset–architecture cells**. Remaining scheduled cells are omitted until complete.
+Current audited coverage: **15 selected positive cells out of 130 / 132 planned dataset–architecture cells**. Remaining scheduled cells are omitted until complete.
 
 ### Protocol
 
 - Each optimizer has three learning rates and three seeds (0–2), with matched architecture, split, epoch budget, and batch size. AdamW rates: `{0.001, 0.003, 0.01}`; Muon and GraphMuon rates: `{0.003, 0.01, 0.03}`. Each family is selected by its lowest three-epoch-sustained mean validation loss, never by crossing time or test metrics.
 - The fixed target is `1.02 × max_seed(best three-epoch-sustained AdamW validation loss)` for the selected AdamW configuration. A run reaches it after three consecutive validation evaluations at or below it. AdamW and GraphMuon must reach it in all three selected seeds. If Muon misses in a completed run, its measured final-budget time is a lower bound on that seed’s crossing time: `>` marks the resulting lower bounds on its mean time and speedup. “Muon reached” shows its successful seeds; a censored row is included only when the speedup lower bound also exceeds 1.
 - Times are mean cumulative **training plus validation seconds** at the third qualifying epoch, measured with CUDA synchronization. Speedup is the ratio of those mean times: `baseline seconds / GraphMuon seconds`. Loading and one state-restored forward/backward warmup are excluded; the first optimizer update is timed. Values above `1×` favor GraphMuon.
-- Node models: two graph layers, width 64, dropout 0.3, 200 epochs; GPS uses two local SAGE blocks with four-head Performer attention. Graph models: three layers, width 64, mean pooling, dropout 0.1, 40 epochs, batch size 512. GraphGPS uses four-head attention and local GINE blocks. These are fixed-budget transfer experiments, not claims of fully tuned final accuracy.
+- Node models: two graph layers, width 64, 200 epochs. GCN/GAT/GraphSAGE/GIN use dropout 0.3 between layers; GPS uses a linear encoder and two local SAGE blocks with four-head Performer attention and no dropout. Graph models: three layers, width 64, mean pooling, dropout 0.1, 40 epochs, batch size 512. GraphGPS uses four-head attention and local GINE blocks. These are fixed-budget transfer experiments, not claims of fully tuned final accuracy.
 - GraphMuon: `tau=0.5`, five NS iterations, diagonal metric, 2,048 sampled rows with replacement, covariance refresh every ten active updates. Muon uses native `torch.optim.Muon` with per-matrix rates adjusted to the same mathematical shape correction; both use AdamW at 0.001 for auxiliary parameters. Weight decay is zero for all methods. GAT uses the documented frozen mean-head approximation.
-- PyTorch 2.11.0+cu130, PyG 2.7.0, FP32 weights, BF16 NS, TF32 disabled, one RTX 6000 Ada GPU and four CPU threads per task. GAT/MAG uses BF16 autocast for all three optimizers because FP32 activations exceed GPU memory; other cells use FP32 forward/backward. Timings from different optimizer runs can be affected by shared-node contention.
-- Citation datasets use their standard public split and normalized features. Heterophilous datasets use published split 0 and standardized features; non-directed variants are symmetrized. OGB uses official train/validation splits; MAG uses its paper-node citation subgraph. Molecular test sets are not used for selection.
-- Products and proteins use the same two-layer GCN equations with sparse CSR propagation and observers on the post-propagation linear modules to bound memory use. Protein node features are mean incident edge features; its target loss is multilabel BCE. Dataset preparation is excluded from timing.
+- PyTorch 2.11.0+cu130, PyG 2.7.0, FP32 weights, BF16 NS, TF32 disabled, one RTX 6000 Ada GPU and four CPU threads per task. GAT/MAG uses BF16 autocast and casts the post-softmax attention coefficients to BF16 for all three optimizers to fit edge messages in GPU memory; other cells use FP32 forward/backward. Timings from different optimizer runs can be affected by shared-node contention.
+- Citation datasets use their standard public split and normalized features. Heterophilous datasets use published split 0 and standardized features; non-directed variants are symmetrized. OGB uses official train/validation splits; arxiv and MAG citation edges are symmetrized, and MAG uses its paper-node citation subgraph. Molecular test sets are not used for selection.
+- Products and proteins use the same two-layer GCN equations with sparse CSR propagation and observers on the post-propagation linear modules to bound memory use. Products uses row-contiguous input features for all three optimizers. Protein node features are mean incident edge features; its target loss is multilabel BCE. Dataset preparation is excluded from timing.
 - Three seeds are a small sample. Ratios near 1 and sub-second measurements should be treated as noisy observations, not established statistical gains. A dagger marks any row whose mean crossing time is below one second for any method. No aggregate across this selected subset is reported.
 
 The LR A/M/G column gives the validation-selected base learning rates for AdamW, Muon, and GraphMuon. Every row uses three seeds per method.
@@ -369,11 +400,12 @@ The LR A/M/G column gives the validation-selected base learning rates for AdamW,
 
 ### GPS with Performer attention — node classification
 
-1 positive rows / 22 fully scored dataset cells.
+2 positive rows / 23 fully scored dataset cells.
 
 | Dataset | Task | Validation target | AdamW s | Muon s | GraphMuon s | vs AdamW | vs Muon | Muon reached | LR A/M/G |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | ogbn-arxiv | OGB node classification | 1.027 | 36.115 | 26.796 | 23.167 | 1.56× | 1.16× | 3/3 | 0.003/0.01/0.01 |
+| ogbn-mag | OGB node classification | 2.729 | 178.286 | 116.736 | 110.865 | 1.61× | 1.05× | 3/3 | 0.003/0.03/0.03 |
 
 ### GCN — graph classification and regression
 
